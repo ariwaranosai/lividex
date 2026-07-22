@@ -24,6 +24,13 @@ test("DashboardServer serves the UI and live JSON status", async () => {
     assert.match(html, /Livis Codex Console/);
     assert.match(html, /当前线程/);
     assert.match(html, /已用时/);
+    assert.match(html, /实时执行轨迹/);
+    assert.match(html, /推理摘要，不含隐藏思维链/);
+    assert.match(html, /<h2>任务结果<\/h2>/);
+    assert.doesNotMatch(html, /状态 \/ 阶段/);
+    const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
+    assert.ok(script);
+    assert.doesNotThrow(() => new Function(script));
     assert.match(page.headers.get("content-security-policy"), /default-src 'self'/);
   } finally {
     await dashboard.stop();

@@ -26,10 +26,43 @@ test("CodexClient aggregates final answer deltas", async () => {
   await new Promise((resolve) => setImmediate(resolve));
   client.handleLine(JSON.stringify({
     method: "item/started",
-    params: { turnId: "turn-1", item: { type: "commandExecution", command: "forge job list --status running" } },
+    params: {
+      turnId: "turn-1",
+      item: {
+        id: "item-command",
+        type: "commandExecution",
+        command: "cat /home/node/.codex/skills/forge-model/SKILL.md && forge job list --status running --token supersecret",
+      },
+    },
   }));
   assert.match(client.status().activeTurns[0].activity, /forge job list/);
   assert.equal(client.status().activeTurns[0].phase, "tool");
+  assert.equal(client.status().activeTurns[0].events[0].kind, "command");
+  assert.doesNotMatch(JSON.stringify(client.status()), /supersecret|\/home\/node/);
+  assert.match(client.status().activeTurns[0].events[0].detail, /--token \[REDACTED\]/);
+  assert.deepEqual(client.status().activeTurns[0].events[1], {
+    startedAt: client.status().activeTurns[0].events[1].startedAt,
+    updatedAt: client.status().activeTurns[0].events[1].updatedAt,
+    kind: "skill",
+    title: "Skill · forge-model",
+    detail: "已读取并启用该 Skill 的执行规范",
+    status: "running",
+  });
+  client.handleLine(JSON.stringify({
+    method: "item/reasoning/summaryTextDelta",
+    params: { turnId: "turn-1", itemId: "reasoning-1", summaryIndex: 0, delta: "先确认正在运行的任务，" },
+  }));
+  client.handleLine(JSON.stringify({
+    method: "item/reasoning/summaryTextDelta",
+    params: { turnId: "turn-1", itemId: "reasoning-1", summaryIndex: 0, delta: "再汇总结果。" },
+  }));
+  client.handleLine(JSON.stringify({
+    method: "item/reasoning/textDelta",
+    params: { turnId: "turn-1", itemId: "reasoning-1", contentIndex: 0, delta: "hidden-private-reasoning" },
+  }));
+  const reasoning = client.status().activeTurns[0].events.find((event) => event.kind === "reasoning");
+  assert.equal(reasoning.detail, "先确认正在运行的任务，再汇总结果。");
+  assert.doesNotMatch(JSON.stringify(client.status()), /hidden-private-reasoning/);
   client.handleLine(JSON.stringify({ method: "item/agentMessage/delta", params: { turnId: "turn-1", delta: "hel" } }));
   assert.equal(client.status().activeTurns[0].phase, "responding");
   client.handleLine(JSON.stringify({ method: "item/agentMessage/delta", params: { turnId: "turn-1", delta: "lo" } }));
