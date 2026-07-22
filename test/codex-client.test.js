@@ -1,0 +1,102 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { PassThrough } from "node:stream";
+import { EventEmitter } from "node:events";
+import { CodexClient } from "../src/codex-client.js";
+
+function fakeChild() {
+  const child = new EventEmitter();
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.kill = () => child.emit("exit", 0, "SIGTERM");
+  return child;
+}
+
+test("CodexClient aggregates final answer deltas", async () => {
+  const child = fakeChild();
+  const client = new CodexClient(
+    { binary: "codex", cwd: process.cwd(), reasoningEffort: "low" },
+    { spawnFn: () => child, log: { warn() {} } },
+  );
+  client.child = child;
+  const turnPromise = client.runTurn("thread-1", "hello", { jobId: "job-1" });
+  const request = JSON.parse(await readLine(child.stdin));
+  client.handleLine(JSON.stringify({ id: request.id, result: { turn: { id: "turn-1" } } }));
+  await new Promise((resolve) => setImmediate(resolve));
+  client.handleLine(JSON.stringify({
+    method: "item/started",
+    params: { turnId: "turn-1", item: { type: "commandExecution", command: "forge job list --status running" } },
+  }));
+  assert.match(client.status().activeTurns[0].activity, /forge job list/);
+  assert.equal(client.status().activeTurns[0].phase, "tool");
+  client.handleLine(JSON.stringify({ method: "item/agentMessage/delta", params: { turnId: "turn-1", delta: "hel" } }));
+  assert.equal(client.status().activeTurns[0].phase, "responding");
+  client.handleLine(JSON.stringify({ method: "item/agentMessage/delta", params: { turnId: "turn-1", delta: "lo" } }));
+  client.handleLine(JSON.stringify({ method: "turn/completed", params: { turn: { id: "turn-1", status: "completed" } } }));
+  assert.deepEqual(await turnPromise, { text: "hello", turnId: "turn-1" });
+  assert.deepEqual(client.status().activeTurns, []);
+});
+
+test("CodexClient exposes thread wait flags", () => {
+  const child = fakeChild();
+  const client = new CodexClient(
+    { binary: "codex", cwd: process.cwd() },
+    { spawnFn: () => child, log: { warn() {} } },
+  );
+  client.child = child;
+  client.handleLine(JSON.stringify({
+    method: "thread/status/changed",
+    params: { threadId: "thread-1", status: { type: "active", activeFlags: ["waitingOnApproval"] } },
+  }));
+  assert.deepEqual(client.status().threadStatuses[0], {
+    threadId: "thread-1",
+    status: "active",
+    waitingOnApproval: true,
+    waitingOnUserInput: false,
+    updatedAt: client.status().threadStatuses[0].updatedAt,
+  });
+});
+
+test("CodexClient starts threads with the configured auto reviewer", async () => {
+  const child = fakeChild();
+  const client = new CodexClient(
+    {
+      binary: "codex",
+      cwd: process.cwd(),
+      model: "gpt-5.6-sol",
+      sandbox: "workspace-write",
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      baseInstructions: "test",
+    },
+    { spawnFn: () => child, log: { warn() {} } },
+  );
+  client.child = child;
+  const threadPromise = client.createThread();
+  const request = JSON.parse(await readLine(child.stdin));
+  assert.equal(request.method, "thread/start");
+  assert.equal(request.params.model, "gpt-5.6-sol");
+  assert.equal(request.params.approvalPolicy, "on-request");
+  assert.equal(request.params.approvalsReviewer, "auto_review");
+  client.handleLine(JSON.stringify({ id: request.id, result: { thread: { id: "thread-1" } } }));
+  assert.equal(await threadPromise, "thread-1");
+});
+
+test("CodexClient fails closed if an approval request reaches the gateway", async () => {
+  const child = fakeChild();
+  const client = new CodexClient(
+    { binary: "codex", cwd: process.cwd() },
+    { spawnFn: () => child, log: { warn() {} } },
+  );
+  client.child = child;
+  client.handleLine(JSON.stringify({ id: 99, method: "item/commandExecution/requestApproval", params: {} }));
+  const response = JSON.parse(await readLine(child.stdin));
+  assert.deepEqual(response, { id: 99, result: { decision: "decline" } });
+});
+
+function readLine(stream) {
+  return new Promise((resolve) => {
+    stream.once("data", (chunk) => resolve(String(chunk).trim()));
+  });
+}

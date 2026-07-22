@@ -1,0 +1,22 @@
+{
+  "name": "livis-codex-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Direct Livis relay to local Codex app-server gateway",
+  "bin": {
+    "livis-codex": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js start",
+    "setup": "node src/cli.js setup",
+    "login": "node src/cli.js login",
+    "doctor": "node src/cli.js doctor",
+    "smoke:codex": "node scripts/smoke-codex.js",
+    "test": "node --test",
+    "check": "node --check src/cli.js && node --check src/codex-client.js && node --check src/livis-client.js && node --check src/gateway.js && node --check src/dashboard-server.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
