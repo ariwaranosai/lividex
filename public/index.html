@@ -28,6 +28,10 @@
     .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 20px; border-bottom: 1px solid #242930; }
     h2 { margin: 0; font-size: 16px; }
     #updated { color: #747c86; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 13px 20px; text-align: left; border-bottom: 1px solid #20252b; font-size: 13px; vertical-align: top; }
+    th { color: #757e88; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
     code { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; color: #a8b1bb; }
     .status { display: inline-flex; align-items: center; border: 1px solid #343a43; border-radius: 999px; padding: 4px 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
     .status.running { color: #7dd3fc; border-color: #0c4a6e; background: #082f4938; }
@@ -56,9 +60,11 @@
     .trace-title { color: #e2e6ea; font-weight: 650; }
     .trace-detail { color: #8f98a3; white-space: pre-wrap; word-break: break-word; font-family: "SFMono-Regular", Consolas, monospace; line-height: 1.5; }
     .trace-time { color: #65707b; white-space: nowrap; }
-    .results-list { display: grid; }
-    .result { padding: 17px 20px; border-bottom: 1px solid #20252b; color: #c9cfd6; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
-    .result:last-child { border-bottom: 0; }
+    .result { color: #c9cfd6; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+    .pagination { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid #242930; color: #747d87; font-size: 12px; }
+    .page-button { border: 1px solid #343a43; border-radius: 8px; background: #15191e; color: #c5cbd2; padding: 6px 10px; cursor: pointer; }
+    .page-button:hover:not(:disabled) { border-color: #475569; background: #1b2027; }
+    .page-button:disabled { cursor: default; opacity: .38; }
     .empty { color: #747c86; padding: 42px 20px; text-align: center; }
     .error { display: none; margin-bottom: 14px; border: 1px solid #7f1d1d; background: #450a0a66; color: #fecaca; border-radius: 12px; padding: 12px 14px; font-size: 13px; }
     @media (max-width: 800px) { .grid { grid-template-columns: repeat(2, 1fr); } header { display: block; } .connection { width: fit-content; margin-top: 18px; } .thread { grid-template-columns: 1fr; } .trace-event { grid-template-columns: 9px minmax(90px, .4fr) minmax(0, 1.6fr); } .trace-time { display: none; } }
@@ -93,6 +99,9 @@
   </main>
   <script>
     const $ = (id) => document.getElementById(id);
+    const RESULT_PAGE_SIZE = 10;
+    let resultPage = 0;
+    let latestJobs = [];
     const statusLabel = { queued: "排队中", running: "运行中", completed: "已完成", interrupted: "已中断", ready: "回传中", failed: "失败", cancelled: "已取消" };
     const phaseLabel = { queued: "排队", starting: "启动", thinking: "推理", planning: "规划", tool: "工具", editing: "修改文件", searching: "搜索", responding: "回复", working: "处理", delivering: "回传", completed: "完成", interrupted: "中断", cancelled: "取消" };
 
@@ -208,6 +217,7 @@
     }
 
     function renderJobs(jobs) {
+      latestJobs = jobs;
       const wrap = $("table-wrap");
       wrap.replaceChildren();
       const results = jobs.filter((job) => job.resultPreview).slice(0, 50);
@@ -218,15 +228,44 @@
         wrap.append(empty);
         return;
       }
-      const list = document.createElement("div");
-      list.className = "results-list";
-      for (const job of results) {
-        const result = document.createElement("article");
-        result.className = "result";
-        result.textContent = job.resultPreview;
-        list.append(result);
+      const pageCount = Math.ceil(results.length / RESULT_PAGE_SIZE);
+      resultPage = Math.min(resultPage, pageCount - 1);
+      const pageResults = results.slice(resultPage * RESULT_PAGE_SIZE, (resultPage + 1) * RESULT_PAGE_SIZE);
+      const table = document.createElement("table");
+      table.innerHTML = "<thead><tr><th>结果</th></tr></thead>";
+      const body = document.createElement("tbody");
+      for (const job of pageResults) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.className = "result";
+        cell.textContent = job.resultPreview;
+        row.append(cell);
+        body.append(row);
       }
-      wrap.append(list);
+      table.append(body);
+      wrap.append(table, pagination(pageCount, results.length));
+    }
+
+    function pagination(pageCount, total) {
+      const bar = document.createElement("nav");
+      bar.className = "pagination";
+      bar.setAttribute("aria-label", "任务结果分页");
+      const previous = pageButton("上一页", resultPage === 0, () => { resultPage -= 1; renderJobs(latestJobs); });
+      const label = document.createElement("span");
+      label.textContent = `第 ${resultPage + 1} / ${pageCount} 页 · 共 ${total} 条 · 每页 10 条`;
+      const next = pageButton("下一页", resultPage >= pageCount - 1, () => { resultPage += 1; renderJobs(latestJobs); });
+      bar.append(previous, label, next);
+      return bar;
+    }
+
+    function pageButton(label, disabled, onClick) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "page-button";
+      button.textContent = label;
+      button.disabled = disabled;
+      button.addEventListener("click", onClick);
+      return button;
     }
 
     function status(value) { const node = document.createElement("span"); node.className = `status ${value}`; node.textContent = statusLabel[value] || value; return node; }

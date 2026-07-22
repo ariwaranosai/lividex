@@ -27,6 +27,9 @@ test("DashboardServer serves the UI and live JSON status", async () => {
     assert.match(html, /实时执行轨迹/);
     assert.match(html, /推理摘要，不含隐藏思维链/);
     assert.match(html, /<h2>任务结果<\/h2>/);
+    assert.match(html, /<th>结果<\/th>/);
+    assert.match(html, /RESULT_PAGE_SIZE = 10/);
+    assert.match(html, /slice\(0, 50\)/);
     assert.doesNotMatch(html, /状态 \/ 阶段/);
     const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
     assert.ok(script);
