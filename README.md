@@ -70,6 +70,66 @@ node src/cli.js logout
 
 可通过 `LIVIS_CODEX_HOME` 指向其他状态目录。
 
+## 在 NAS 上用 Docker Compose 运行
+
+镜像基于 Node.js 22，并安装与本项目验证过的 `codex-cli 0.145.0`。同时支持
+`linux/amd64` 与 `linux/arm64`，具体取决于 NAS 上 Docker 所选基础镜像架构。
+
+首次部署：
+
+```bash
+cp .env.example .env
+mkdir -p workspace
+
+# 编辑 .env，把 CODEX_WORKSPACE 指向允许 Codex 操作的 NAS 目录。
+# 如果要从局域网打开控制台，把 DASHBOARD_BIND_IP 改为 NAS 的局域网 IP。
+
+docker compose build
+
+# 生成 Livis-Codex 配置，保存在 livis-state volume。
+docker compose run --rm livis-codex \
+  node src/cli.js setup --cwd /workspace
+
+# 登录 Codex，浏览器打开终端给出的 device-auth 地址。
+docker compose run --rm livis-codex \
+  codex login --device-auth
+
+# 登录 Livis；复制终端给出的地址到浏览器完成授权。
+docker compose run --rm livis-codex \
+  node src/cli.js login --no-browser
+
+# 将输出的 Agent ID 绑定到理想同学 App 后启动。
+docker compose up -d
+docker compose logs -f livis-codex
+```
+
+控制台地址为 `http://<DASHBOARD_BIND_IP>:<DASHBOARD_PORT>`。页面没有身份验证，
+并会展示任务输入和结果，因此默认只发布到 `127.0.0.1`；不要通过路由器端口转发或反向代理直接暴露到公网。
+
+常用维护命令：
+
+```bash
+# 查看 Agent ID 与健康状态
+docker compose run --rm livis-codex node src/cli.js agent-id
+docker compose ps
+
+# 更新代码后重建并滚动重启
+docker compose build --pull
+docker compose up -d
+
+# 停止服务，但保留两个登录态 volume
+docker compose down
+
+# 警告：加 -v 会删除 Livis 和 Codex 登录态，需要重新登录
+docker compose down -v
+```
+
+`CODEX_WORKSPACE` 是 Codex 在容器内唯一挂载的业务目录。建议专门创建一个目录，
+不要挂载 NAS 根目录、用户家目录、Docker socket 或包含私钥/相册/备份的共享目录。
+容器默认以非 root 的 `uid=1000(node)` 运行；NAS 上挂载的工作目录需要允许 UID 1000
+读写。可先运行 `docker compose run --rm livis-codex id` 确认容器身份，再通过 NAS ACL
+只给这个目录所需权限。
+
 ## 安全模型
 
 - Livis 输入被视为不可信远端输入。

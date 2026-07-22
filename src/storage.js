@@ -41,12 +41,25 @@ export async function ensureConfig(paths, overrides = {}) {
   return created;
 }
 
-export async function loadConfig(paths) {
+export async function loadConfig(paths, env = process.env) {
   const config = await readJson(paths.config, null);
   if (!config) {
     throw new Error(`Missing config: ${paths.config}. Run \`livis-codex setup\` first.`);
   }
-  return mergeConfig(DEFAULT_CONFIG, config);
+  return applyEnvOverrides(mergeConfig(DEFAULT_CONFIG, config), env);
+}
+
+export function applyEnvOverrides(config, env = process.env) {
+  const dashboard = { ...config.dashboard };
+  if (env.LIVIS_CODEX_DASHBOARD_HOST) dashboard.host = env.LIVIS_CODEX_DASHBOARD_HOST;
+  if (env.LIVIS_CODEX_DASHBOARD_PORT) {
+    const port = Number(env.LIVIS_CODEX_DASHBOARD_PORT);
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+      throw new Error("LIVIS_CODEX_DASHBOARD_PORT must be an integer between 1 and 65535");
+    }
+    dashboard.port = port;
+  }
+  return { ...config, dashboard };
 }
 
 export function mergeConfig(base, extra) {

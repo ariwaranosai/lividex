@@ -3,7 +3,29 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { StateStore } from "../src/storage.js";
+import { applyEnvOverrides, StateStore } from "../src/storage.js";
+
+test("Docker dashboard environment only overrides its listen address", () => {
+  const original = {
+    codex: { cwd: "/workspace" },
+    dashboard: { enabled: true, host: "127.0.0.1", port: 8765 },
+  };
+  const configured = applyEnvOverrides(original, {
+    LIVIS_CODEX_DASHBOARD_HOST: "0.0.0.0",
+    LIVIS_CODEX_DASHBOARD_PORT: "9000",
+  });
+  assert.deepEqual(configured.dashboard, { enabled: true, host: "0.0.0.0", port: 9000 });
+  assert.deepEqual(configured.codex, original.codex);
+});
+
+test("Docker dashboard environment rejects an invalid port", () => {
+  assert.throws(
+    () => applyEnvOverrides({ dashboard: { host: "127.0.0.1", port: 8765 } }, {
+      LIVIS_CODEX_DASHBOARD_PORT: "70000",
+    }),
+    /between 1 and 65535/,
+  );
+});
 
 test("StateStore marks jobs left running by an old process as interrupted", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "livis-codex-state-"));

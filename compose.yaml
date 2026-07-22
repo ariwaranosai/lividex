@@ -1,0 +1,34 @@
+services:
+  livis-codex:
+    build:
+      context: .
+      args:
+        CODEX_VERSION: ${CODEX_VERSION:-0.145.0}
+    image: ${LIVIS_CODEX_IMAGE:-livis-codex:local}
+    container_name: livis-codex
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      HOME: /home/node
+      LIVIS_CODEX_HOME: /home/node/.livis-codex
+      LIVIS_CODEX_DASHBOARD_HOST: 0.0.0.0
+      LIVIS_CODEX_DASHBOARD_PORT: 8765
+    ports:
+      - "${DASHBOARD_BIND_IP:-127.0.0.1}:${DASHBOARD_PORT:-8765}:8765"
+    volumes:
+      - livis-state:/home/node/.livis-codex
+      - codex-state:/home/node/.codex
+      - "${CODEX_WORKSPACE:-./workspace}:/workspace"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--output", "/dev/null", "http://127.0.0.1:8765/api/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 30s
+
+volumes:
+  livis-state:
+  codex-state:
