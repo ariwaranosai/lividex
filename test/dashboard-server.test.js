@@ -26,11 +26,11 @@ test("DashboardServer serves the UI and live JSON status", async () => {
     assert.match(html, /已用时/);
     assert.match(html, /实时执行轨迹/);
     assert.match(html, /推理摘要，不含隐藏思维链/);
-    assert.match(html, /<h2>任务结果<\/h2>/);
-    assert.match(html, /<th>结果<\/th>/);
+    assert.match(html, /<h2>后台任务<\/h2>/);
+    assert.match(html, /<th>状态<\/th><th>任务 ID<\/th><th>节点<\/th><th>更新时间<\/th><th>结果<\/th>/);
     assert.match(html, /RESULT_PAGE_SIZE = 10/);
     assert.match(html, /slice\(0, 50\)/);
-    assert.doesNotMatch(html, /状态 \/ 阶段/);
+    assert.doesNotMatch(html, /<th>任务输入<\/th>|<th>状态 \/ 阶段<\/th>|<th>耗时<\/th>/);
     const script = html.match(/<script>([\s\S]*)<\/script>/)?.[1];
     assert.ok(script);
     assert.doesNotThrow(() => new Function(script));
