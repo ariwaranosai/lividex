@@ -47,6 +47,34 @@ http://127.0.0.1:8765
 任务列表与本地已完成历史只保留最新 50 条；运行中和等待 Livis 回执的任务不会被清理。
 默认只监听 loopback，不暴露到局域网。
 
+## macOS 开机启动与菜单栏
+
+macOS 可以用一个脚本安装原生菜单栏程序和 LaunchAgent：
+
+```bash
+npm run macos:install
+```
+
+安装后：
+
+- 登录 macOS 时自动启动；
+- Livis 未登录时弹出提醒，可直接打开登录终端；
+- 登录成功后自动启动网关；
+- 菜单栏图标用绿色、橙色、红色显示在线、连接中、离线状态；
+- 点击菜单栏图标后可打开 Dashboard。
+
+常用命令：
+
+```bash
+npm run macos:status
+npm run macos:uninstall
+```
+
+安装脚本会记录当前项目和 Node.js 的绝对路径，避免 LaunchAgent 缺少交互式
+Shell `PATH`。如果移动了项目目录或更换了 Node.js，重新运行安装命令即可。
+菜单栏与网关日志保存在 `~/.livis-codex/logs/`。卸载只会把启动项和菜单栏程序
+移到废纸篓，不会删除 Livis 配置、登录态或任务状态。
+
 检查环境：
 
 ```bash
