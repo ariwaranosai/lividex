@@ -12,6 +12,10 @@
     "setup": "node src/cli.js setup",
     "login": "node src/cli.js login",
     "doctor": "node src/cli.js doctor",
+    "macos:install": "zsh scripts/macos-menubar.sh install",
+    "macos:build": "zsh scripts/macos-menubar.sh build",
+    "macos:status": "zsh scripts/macos-menubar.sh status",
+    "macos:uninstall": "zsh scripts/macos-menubar.sh uninstall",
     "smoke:codex": "node scripts/smoke-codex.js",
     "test": "node --test",
     "check": "node --check src/cli.js && node --check src/codex-client.js && node --check src/livis-client.js && node --check src/gateway.js && node --check src/dashboard-server.js"
