@@ -49,6 +49,16 @@ export async function loadConfig(paths, env = process.env) {
   return applyEnvOverrides(mergeConfig(DEFAULT_CONFIG, config), env);
 }
 
+export async function updateConfig(paths, overrides) {
+  const current = await readJson(paths.config, null);
+  if (!current) {
+    throw new Error(`Missing config: ${paths.config}. Run \`livis-codex setup\` first.`);
+  }
+  const updated = mergeConfig(mergeConfig(DEFAULT_CONFIG, current), overrides);
+  await writeJsonAtomic(paths.config, updated);
+  return updated;
+}
+
 export function applyEnvOverrides(config, env = process.env) {
   const dashboard = { ...config.dashboard };
   if (env.LIVIS_CODEX_DASHBOARD_HOST) dashboard.host = env.LIVIS_CODEX_DASHBOARD_HOST;

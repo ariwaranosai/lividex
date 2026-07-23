@@ -15,6 +15,7 @@ import {
   loadOrCreateAgentId,
   loadOrCreateDeviceId,
   statePaths,
+  updateConfig,
 } from "./storage.js";
 
 const command = process.argv[2] || "help";
@@ -89,13 +90,18 @@ async function startCommand() {
       livis: livis.status(),
       codex: {
         ...codex.status(),
-        model: config.codex.model,
-        reasoningEffort: config.codex.reasoningEffort,
         sandbox: config.codex.sandbox,
         approvalsReviewer: config.codex.approvalsReviewer,
       },
       gateway: gateway.status(),
     }),
+    updateSettings: async (settings) => {
+      const normalized = codex.validateSettings(settings);
+      await updateConfig(paths, { codex: normalized });
+      return codex.updateSettings(normalized, {
+        threadIds: Object.values(state.value.threads),
+      });
+    },
   });
   const shutdown = async (signal) => {
     console.log(`\nReceived ${signal}, stopping...`);
