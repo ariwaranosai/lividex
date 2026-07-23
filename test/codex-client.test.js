@@ -128,6 +128,64 @@ test("CodexClient fails closed if an approval request reaches the gateway", asyn
   assert.deepEqual(response, { id: 99, result: { decision: "decline" } });
 });
 
+test("CodexClient loads available models and updates existing threads", async () => {
+  const child = fakeChild();
+  const client = new CodexClient(
+    {
+      binary: "codex",
+      cwd: process.cwd(),
+      model: "gpt-old",
+      reasoningEffort: "medium",
+    },
+    { spawnFn: () => child, log: { warn() {} } },
+  );
+  client.child = child;
+  const modelsPromise = client.refreshModels();
+  const listRequest = JSON.parse(await readLine(child.stdin));
+  assert.equal(listRequest.method, "model/list");
+  client.handleLine(JSON.stringify({
+    id: listRequest.id,
+    result: {
+      data: [{
+        id: "gpt-new",
+        model: "gpt-new",
+        displayName: "GPT New",
+        description: "test model",
+        defaultReasoningEffort: "high",
+        supportedReasoningEfforts: [
+          { reasoningEffort: "medium", description: "balanced" },
+          { reasoningEffort: "high", description: "deep" },
+        ],
+      }],
+      nextCursor: null,
+    },
+  }));
+  await modelsPromise;
+  assert.equal(client.status().models[0].model, "gpt-new");
+
+  client.knownThreads.add("thread-1");
+  const updatePromise = client.updateSettings({ model: "gpt-new", reasoningEffort: "high" });
+  const updateRequest = JSON.parse(await readLine(child.stdin));
+  assert.equal(updateRequest.method, "thread/settings/update");
+  assert.deepEqual(updateRequest.params, {
+    threadId: "thread-1",
+    model: "gpt-new",
+    effort: "high",
+  });
+  client.handleLine(JSON.stringify({ id: updateRequest.id, result: {} }));
+  assert.deepEqual(await updatePromise, {
+    model: "gpt-new",
+    reasoningEffort: "high",
+    updatedThreads: 1,
+    failedThreads: 0,
+  });
+  assert.equal(client.status().reasoningEffort, "high");
+  assert.throws(
+    () => client.validateSettings({ model: "gpt-new", reasoningEffort: "ultra" }),
+    /不支持思考强度/,
+  );
+});
+
 function readLine(stream) {
   return new Promise((resolve) => {
     stream.once("data", (chunk) => resolve(String(chunk).trim()));

@@ -3,10 +3,15 @@ import assert from "node:assert/strict";
 import { DashboardServer } from "../src/dashboard-server.js";
 
 test("DashboardServer serves the UI and live JSON status", async () => {
+  const updates = [];
   const dashboard = new DashboardServer(
     { enabled: true, host: "127.0.0.1", port: 0 },
     {
       snapshot: () => ({ now: 123, gateway: { jobs: [{ id: "job-1", status: "running" }] } }),
+      updateSettings: async (settings) => {
+        updates.push(settings);
+        return { ...settings, updatedThreads: 2, failedThreads: 0 };
+      },
       log: { log() {} },
     },
   );
@@ -26,6 +31,10 @@ test("DashboardServer serves the UI and live JSON status", async () => {
     assert.match(html, /已用时/);
     assert.match(html, /实时执行轨迹/);
     assert.match(html, /推理摘要，不含隐藏思维链/);
+    assert.match(html, /Codex 设置/);
+    assert.match(html, /model-select/);
+    assert.match(html, /effort-select/);
+    assert.match(html, /\/api\/settings/);
     assert.match(html, /<h2>后台任务<\/h2>/);
     assert.match(html, /<th>状态<\/th><th>任务 ID<\/th><th>输入问题<\/th><th>节点<\/th><th>更新时间<\/th><th>结果<\/th>/);
     assert.match(html, /RESULT_PAGE_SIZE = 10/);
@@ -35,6 +44,30 @@ test("DashboardServer serves the UI and live JSON status", async () => {
     assert.ok(script);
     assert.doesNotThrow(() => new Function(script));
     assert.match(page.headers.get("content-security-policy"), /default-src 'self'/);
+
+    const update = await fetch(`${url}/api/settings`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-test", reasoningEffort: "high" }),
+    });
+    assert.equal(update.status, 200);
+    assert.deepEqual(await update.json(), {
+      model: "gpt-test",
+      reasoningEffort: "high",
+      updatedThreads: 2,
+      failedThreads: 0,
+    });
+    assert.deepEqual(updates, [{ model: "gpt-test", reasoningEffort: "high" }]);
+
+    const crossOrigin = await fetch(`${url}/api/settings`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://example.com",
+      },
+      body: "{}",
+    });
+    assert.equal(crossOrigin.status, 403);
   } finally {
     await dashboard.stop();
   }

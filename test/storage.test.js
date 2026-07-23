@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { applyEnvOverrides, StateStore } from "../src/storage.js";
+import { applyEnvOverrides, StateStore, updateConfig } from "../src/storage.js";
 
 test("Docker dashboard environment only overrides its listen address", () => {
   const original = {
@@ -25,6 +25,29 @@ test("Docker dashboard environment rejects an invalid port", () => {
     }),
     /between 1 and 65535/,
   );
+});
+
+test("updateConfig persists Codex settings without dropping other config", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "livis-codex-config-"));
+  const paths = { config: path.join(root, "config.json") };
+  try {
+    await writeFile(paths.config, JSON.stringify({
+      livis: { clientId: "custom-client" },
+      codex: { model: "gpt-old", reasoningEffort: "low", cwd: "/workspace" },
+    }));
+    const updated = await updateConfig(paths, {
+      codex: { model: "gpt-new", reasoningEffort: "high" },
+    });
+    assert.equal(updated.livis.clientId, "custom-client");
+    assert.equal(updated.codex.cwd, "/workspace");
+    assert.equal(updated.codex.model, "gpt-new");
+    assert.equal(updated.codex.reasoningEffort, "high");
+    const saved = JSON.parse(await readFile(paths.config, "utf8"));
+    assert.equal(saved.codex.model, "gpt-new");
+    assert.equal(saved.codex.reasoningEffort, "high");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("StateStore marks jobs left running by an old process as interrupted", async () => {

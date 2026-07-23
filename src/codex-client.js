@@ -14,6 +14,8 @@ export class CodexClient extends EventEmitter {
     this.pending = new Map();
     this.turns = new Map();
     this.threadStatuses = new Map();
+    this.knownThreads = new Set();
+    this.models = [];
   }
 
   async start() {
@@ -35,6 +37,9 @@ export class CodexClient extends EventEmitter {
       capabilities: { experimentalApi: true },
     });
     this.notify("initialized", {});
+    await this.refreshModels().catch((error) => {
+      this.log.warn(`[codex] cannot load model catalog: ${error.message}`);
+    });
   }
 
   async stop() {
@@ -69,12 +74,73 @@ export class CodexClient extends EventEmitter {
     };
     if (this.config.model) params.model = this.config.model;
     const response = await this.request("thread/start", params);
-    return response.thread.id;
+    const threadId = response.thread.id;
+    this.knownThreads.add(threadId);
+    return threadId;
   }
 
   async resumeThread(threadId) {
     const response = await this.request("thread/resume", { threadId });
-    return response.thread.id;
+    const resumedThreadId = response.thread.id;
+    this.knownThreads.add(resumedThreadId);
+    await this.#updateThreadSettings(resumedThreadId).catch((error) => {
+      this.log.warn(`[codex] cannot apply current settings to thread ${resumedThreadId}: ${error.message}`);
+    });
+    return resumedThreadId;
+  }
+
+  async refreshModels() {
+    const models = [];
+    let cursor = null;
+    do {
+      const response = await this.request("model/list", {
+        cursor,
+        limit: 100,
+        includeHidden: false,
+      });
+      models.push(...(response.data || []));
+      cursor = response.nextCursor || null;
+    } while (cursor && models.length < 1_000);
+    this.models = models.map(normalizeModel);
+    return this.models;
+  }
+
+  validateSettings(settings = {}) {
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+      throw validationError("设置必须是 JSON 对象。");
+    }
+    const model = settings.model ?? this.config.model;
+    const reasoningEffort = settings.reasoningEffort ?? this.config.reasoningEffort;
+    if (typeof model !== "string" || !model) throw validationError("必须选择模型。");
+    if (typeof reasoningEffort !== "string" || !reasoningEffort) {
+      throw validationError("必须选择思考强度。");
+    }
+    const selected = this.models.find((entry) => entry.model === model);
+    if (this.models.length && !selected) throw validationError(`模型不可用：${model}`);
+    const supported = selected?.supportedReasoningEfforts.map((option) => option.reasoningEffort) || [];
+    if (supported.length && !supported.includes(reasoningEffort)) {
+      throw validationError(`模型 ${model} 不支持思考强度 ${reasoningEffort}。`);
+    }
+    return { model, reasoningEffort };
+  }
+
+  async updateSettings(settings, { threadIds = [] } = {}) {
+    const normalized = this.validateSettings(settings);
+    this.config.model = normalized.model;
+    this.config.reasoningEffort = normalized.reasoningEffort;
+    const targets = new Set([...this.knownThreads, ...threadIds].filter(Boolean));
+    const results = await Promise.allSettled(
+      [...targets].map((threadId) => this.#updateThreadSettings(threadId)),
+    );
+    const failedThreads = results.filter((result) => result.status === "rejected").length;
+    if (failedThreads) {
+      this.log.warn(`[codex] settings saved, but ${failedThreads} existing thread(s) could not be updated`);
+    }
+    return {
+      ...normalized,
+      updatedThreads: results.length - failedThreads,
+      failedThreads,
+    };
   }
 
   async runTurn(threadId, text, { jobId = null, onTurnStarted = null } = {}) {
@@ -117,6 +183,9 @@ export class CodexClient extends EventEmitter {
   status() {
     return {
       running: Boolean(this.child),
+      model: this.config.model,
+      reasoningEffort: this.config.reasoningEffort,
+      models: this.models,
       activeTurns: [...this.turns.entries()].map(([turnId, turn]) => ({
         turnId,
         threadId: turn.threadId,
@@ -316,6 +385,14 @@ export class CodexClient extends EventEmitter {
     });
   }
 
+  #updateThreadSettings(threadId) {
+    return this.request("thread/settings/update", {
+      threadId,
+      model: this.config.model,
+      effort: this.config.reasoningEffort,
+    });
+  }
+
   #send(message) {
     this.child.stdin.write(`${JSON.stringify(message)}\n`);
   }
@@ -329,6 +406,26 @@ export class CodexClient extends EventEmitter {
     this.turns.clear();
     this.emit("exit", error);
   }
+}
+
+function normalizeModel(model = {}) {
+  return {
+    id: model.id || model.model,
+    model: model.model || model.id,
+    displayName: model.displayName || model.model || model.id,
+    description: model.description || "",
+    defaultReasoningEffort: model.defaultReasoningEffort || "medium",
+    supportedReasoningEfforts: (model.supportedReasoningEfforts || []).map((option) => ({
+      reasoningEffort: option.reasoningEffort,
+      description: option.description || "",
+    })),
+  };
+}
+
+function validationError(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
 }
 
 function describeItem(item = {}, cwd = "") {
