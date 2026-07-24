@@ -242,21 +242,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func statusImage(color: NSColor) -> NSImage {
-    let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
-      color.setFill()
-      NSBezierPath(ovalIn: rect.insetBy(dx: 2, dy: 2)).fill()
-      NSColor.white.setStroke()
-      let wave = NSBezierPath()
-      wave.lineWidth = 1.5
-      wave.move(to: NSPoint(x: 5, y: 9))
-      wave.curve(
-        to: NSPoint(x: 13, y: 9),
-        controlPoint1: NSPoint(x: 7, y: 4),
-        controlPoint2: NSPoint(x: 11, y: 14)
-      )
-      wave.stroke()
-      return true
-    }
+    let configuration = NSImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+      .applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+    let image = NSImage(
+      systemSymbolName: "link",
+      accessibilityDescription: "Livis Codex 连接状态"
+    )?.withSymbolConfiguration(configuration) ?? NSImage()
     image.isTemplate = false
     return image
   }
