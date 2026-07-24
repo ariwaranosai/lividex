@@ -59,11 +59,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
   private let menu = NSMenu()
   private let statusMenuItem = NSMenuItem(title: "正在检查状态…", action: nil, keyEquivalent: "")
   private let dashboardMenuItem = NSMenuItem(title: "打开 Dashboard", action: #selector(openDashboard), keyEquivalent: "d")
+  private let restartMenuItem = NSMenuItem(title: "重启后台进程", action: #selector(restartGateway), keyEquivalent: "r")
   private let loginMenuItem = NSMenuItem(title: "登录 Livis…", action: #selector(startLogin), keyEquivalent: "l")
   private var timer: Timer?
   private var gatewayProcess: Process?
   private var loginReminderShown = false
   private var gatewayStartPending = false
+  private var gatewayRestartPending = false
 
   init(arguments: Arguments) {
     self.arguments = arguments
@@ -95,6 +97,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     statusMenuItem.isEnabled = false
     dashboardMenuItem.target = self
     dashboardMenuItem.image = NSImage(systemSymbolName: "rectangle.3.group", accessibilityDescription: "Dashboard")
+    restartMenuItem.target = self
+    restartMenuItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "重启后台进程")
     loginMenuItem.target = self
     loginMenuItem.image = NSImage(systemSymbolName: "person.crop.circle.badge.checkmark", accessibilityDescription: "登录")
 
@@ -104,6 +108,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(statusMenuItem)
     menu.addItem(.separator())
     menu.addItem(dashboardMenuItem)
+    menu.addItem(restartMenuItem)
     menu.addItem(loginMenuItem)
     menu.addItem(.separator())
     menu.addItem(quitItem)
@@ -174,8 +179,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     process.standardError = logHandle
     process.terminationHandler = { [weak self] _ in
       DispatchQueue.main.async {
-        self?.gatewayProcess = nil
-        self?.gatewayStartPending = false
+        guard let self else { return }
+        self.gatewayProcess = nil
+        self.gatewayStartPending = false
+        if self.gatewayRestartPending {
+          self.gatewayRestartPending = false
+          self.startGatewayIfNeeded()
+        }
       }
     }
 
@@ -227,6 +237,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     statusItem.button?.image = statusImage(color: state.color)
     statusItem.button?.toolTip = state.title
     dashboardMenuItem.isEnabled = state == .online || state == .connecting
+    restartMenuItem.isEnabled = isLoggedIn() && !gatewayStartPending && !gatewayRestartPending
     loginMenuItem.isHidden = state != .notLoggedIn
   }
 
@@ -267,6 +278,25 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
   @objc private func openDashboard() {
     NSWorkspace.shared.open(dashboardURL())
+  }
+
+  @objc private func restartGateway() {
+    guard isLoggedIn() else {
+      showLoginReminder()
+      return
+    }
+
+    appendMenuLog("用户请求重启后台进程")
+    update(state: .connecting)
+    if let process = gatewayProcess, process.isRunning {
+      gatewayRestartPending = true
+      restartMenuItem.isEnabled = false
+      process.terminate()
+    } else {
+      gatewayRestartPending = false
+      gatewayStartPending = false
+      startGatewayIfNeeded()
+    }
   }
 
   @objc private func startLogin() {
