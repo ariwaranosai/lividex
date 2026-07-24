@@ -34,4 +34,8 @@ test("menu bar checks auth, controls the gateway, and exposes login", async () =
   assert.match(source, /self\.startGatewayIfNeeded\(\)/);
   assert.match(source, /@objc private func startLogin/);
   assert.match(source, /attributes: \[\.foregroundColor: NSColor\.labelColor\]/);
+  assert.match(source, /systemSymbolName: "link"/);
+  assert.match(source, /SymbolConfiguration\(pointSize: 16, weight: \.semibold\)/);
+  assert.match(source, /SymbolConfiguration\(paletteColors: \[color\]\)/);
+  assert.match(source, /image\.isTemplate = false/);
 });
