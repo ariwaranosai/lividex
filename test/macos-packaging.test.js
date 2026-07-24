@@ -20,13 +20,18 @@ test("macOS installer is valid shell and installs a login LaunchAgent", async ()
   assert.match(source, /dashboard_url/);
 });
 
-test("menu bar checks auth, polls the real Dashboard, and exposes login", async () => {
+test("menu bar checks auth, controls the gateway, and exposes login", async () => {
   const source = await readFile(MENU_BAR, "utf8");
   assert.match(source, /refreshToken/);
   assert.match(source, /appendingPathComponent\("api\/status"\)/);
   assert.match(source, /livis\["relayReady"\]/);
   assert.match(source, /showLoginReminder/);
   assert.match(source, /@objc private func openDashboard/);
+  assert.match(source, /NSMenuItem\(title: "重启后台进程", action: #selector\(restartGateway\)/);
+  assert.match(source, /@objc private func restartGateway/);
+  assert.match(source, /gatewayRestartPending = true/);
+  assert.match(source, /process\.terminate\(\)/);
+  assert.match(source, /self\.startGatewayIfNeeded\(\)/);
   assert.match(source, /@objc private func startLogin/);
   assert.match(source, /attributes: \[\.foregroundColor: NSColor\.labelColor\]/);
 });
