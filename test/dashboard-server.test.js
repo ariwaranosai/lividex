@@ -34,7 +34,12 @@ test("DashboardServer serves the UI and live JSON status", async () => {
     assert.match(html, /Codex 设置/);
     assert.match(html, /model-select/);
     assert.match(html, /effort-select/);
+    assert.match(html, /model-trigger/);
+    assert.match(html, /effort-trigger/);
+    assert.match(html, /picker-options/);
+    assert.doesNotMatch(html, /<select id="(?:model|effort)-select"/);
     assert.match(html, /\/api\/settings/);
+    assert.match(html, /settingsSignature !== renderedSettingsSignature/);
     assert.match(html, /<h2>后台任务<\/h2>/);
     assert.match(html, /<th>状态<\/th><th>任务 ID<\/th><th>输入问题<\/th><th>节点<\/th><th>更新时间<\/th><th>结果<\/th>/);
     assert.match(html, /RESULT_PAGE_SIZE = 10/);
