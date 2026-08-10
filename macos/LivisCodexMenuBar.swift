@@ -162,6 +162,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func startGatewayIfNeeded() {
+    if gatewayProcess?.isRunning != true {
+      gatewayProcess = nil
+      gatewayStartPending = false
+      gatewayRestartPending = false
+    }
     guard !gatewayStartPending, gatewayProcess?.isRunning != true, isLoggedIn() else { return }
     gatewayStartPending = true
 
