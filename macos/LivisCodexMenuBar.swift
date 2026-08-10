@@ -177,9 +177,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     let logHandle = openLog(named: "gateway.log")
     process.standardOutput = logHandle
     process.standardError = logHandle
-    process.terminationHandler = { [weak self] _ in
+    process.terminationHandler = { [weak self] terminatedProcess in
       DispatchQueue.main.async {
         guard let self else { return }
+        guard self.gatewayProcess === terminatedProcess else { return }
         self.gatewayProcess = nil
         self.gatewayStartPending = false
         if self.gatewayRestartPending {

@@ -16,6 +16,7 @@ export class LivisClient extends EventEmitter {
     this.reconnectAttempt = 0;
     this.heartbeatTimer = null;
     this.reconnectTimer = null;
+    this.disconnectedSockets = new WeakSet();
     this.lastSocketOpenAt = null;
     this.lastMessageAt = null;
     this.lastMessageType = null;
@@ -49,15 +50,15 @@ export class LivisClient extends EventEmitter {
       this.emit("connected");
     });
     socket.addEventListener("message", (event) => this.#onMessage(event.data));
-    socket.addEventListener("error", (event) => this.log.error(`[livis] websocket error: ${event.message || "unknown"}`));
-    socket.addEventListener("close", (event) => {
-      this.#stopHeartbeat();
-      this.relayReady = false;
-      this.lastClose = { code: event.code, reason: event.reason || "", at: Date.now() };
-      this.log.warn(`[livis] disconnected (code=${event.code}${event.reason ? ` reason=${event.reason}` : ""})`);
-      this.emit("disconnected", event);
-      if (!this.stopping) this.#scheduleReconnect();
+    socket.addEventListener("error", (event) => {
+      const reason = event.message || "unknown";
+      this.log.error(`[livis] websocket error: ${reason}`);
+      this.#handleDisconnect(socket, { code: 1006, reason: `websocket error: ${reason}` });
+      try {
+        socket.close();
+      } catch {}
     });
+    socket.addEventListener("close", (event) => this.#handleDisconnect(socket, event));
   }
 
   stop() {
@@ -155,13 +156,29 @@ export class LivisClient extends EventEmitter {
     this.heartbeatTimer = null;
   }
 
+  #handleDisconnect(socket, event) {
+    if (this.disconnectedSockets.has(socket)) return;
+    this.disconnectedSockets.add(socket);
+    if (this.socket === socket) this.socket = null;
+    this.#stopHeartbeat();
+    this.relayReady = false;
+    this.lastClose = { code: event.code, reason: event.reason || "", at: Date.now() };
+    this.log.warn(`[livis] disconnected (code=${event.code}${event.reason ? ` reason=${event.reason}` : ""})`);
+    this.emit("disconnected", event);
+    if (!this.stopping) this.#scheduleReconnect();
+  }
+
   #scheduleReconnect() {
+    clearTimeout(this.reconnectTimer);
     const delay = Math.min(1000 * 2 ** this.reconnectAttempt++, this.config.reconnectMaxMs);
     const jittered = Math.round(delay * (0.8 + Math.random() * 0.4));
     this.log.warn(`[livis] reconnecting in ${jittered}ms`);
-    this.reconnectTimer = setTimeout(() => this.connect().catch((error) => {
-      this.log.error(`[livis] reconnect failed: ${error.message}`);
-      this.#scheduleReconnect();
-    }), jittered);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect().catch((error) => {
+        this.log.error(`[livis] reconnect failed: ${error.message}`);
+        this.#scheduleReconnect();
+      });
+    }, jittered);
   }
 }

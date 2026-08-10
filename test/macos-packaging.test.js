@@ -31,6 +31,7 @@ test("menu bar checks auth, controls the gateway, and exposes login", async () =
   assert.match(source, /@objc private func restartGateway/);
   assert.match(source, /gatewayRestartPending = true/);
   assert.match(source, /process\.terminate\(\)/);
+  assert.match(source, /guard self\.gatewayProcess === terminatedProcess else \{ return \}/);
   assert.match(source, /self\.startGatewayIfNeeded\(\)/);
   assert.match(source, /@objc private func startLogin/);
   assert.match(source, /attributes: \[\.foregroundColor: NSColor\.labelColor\]/);
