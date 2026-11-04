@@ -69,10 +69,15 @@ async function startCommand() {
     nodeName: "我的电脑",
   };
   const codex = new CodexClient(config.codex);
+  let tokenRequest;
+  const tokenProvider = () => {
+    if (!tokenRequest) tokenRequest = getAccessToken(config.livis, paths).finally(() => { tokenRequest = null; });
+    return tokenRequest;
+  };
   const livis = new LivisClient(
     { ...config.livis, ...config.gateway },
     identity,
-    () => getAccessToken(config.livis, paths),
+    tokenProvider,
   );
   const state = new StateStore(paths.state);
   const gateway = new Gateway({

@@ -1,3 +1,5 @@
+import { createDeliveryDirectory, deliveryInstructions, parseDelivery, uploadDeliveryFile } from "./file-delivery.js";
+
 export class Gateway {
   constructor({ livis, codex, state, maxInputChars = 100_000, log = console }) {
     this.livis = livis;
@@ -129,10 +131,11 @@ export class Gateway {
       await this.state.setThread(command.fromNodeId, threadId);
     }
     await this.state.setJob(jobId, { threadId, phase: "thinking", activity: "正在推理" });
-    const active = { threadId, turnId: null, cancelled: false };
+    const active = { threadId, turnId: null, cancelled: false, abort: new AbortController() };
     this.active.set(jobId, active);
     try {
-      const result = await this.codex.runTurn(threadId, command.content, {
+      const directory = await createDeliveryDirectory(this.codex.config.cwd);
+      const result = await this.codex.runTurn(threadId, command.content + deliveryInstructions(directory), {
         jobId,
         onTurnStarted: (turnId) => {
           active.turnId = turnId;
@@ -146,7 +149,13 @@ export class Gateway {
         },
       });
       if (active.cancelled) return;
-      await this.#finish(jobId, result.text || "Codex returned an empty response.");
+      const delivery = parseDelivery(result.text || "Codex returned an empty response.");
+      const files = [];
+      for (const name of delivery.names) {
+        if (active.cancelled) return;
+        files.push(await uploadDeliveryFile({ directory, name, jobId, tokenProvider: this.livis.tokenProvider, signal: active.abort.signal }));
+      }
+      if (!active.cancelled) await this.#finish(jobId, delivery.text || "文件已准备好。", files);
     } catch (error) {
       if (!active.cancelled) await this.#finish(jobId, `Error: ${error.message}`);
     } finally {
@@ -154,8 +163,8 @@ export class Gateway {
     }
   }
 
-  async #finish(jobId, text) {
-    const result = JSON.stringify({ text });
+  async #finish(jobId, text, files = []) {
+    const result = JSON.stringify(files.length ? { text, files } : { text });
     const job = this.state.getJob(jobId) || {};
     const codexCompletedAt = Date.now();
     await this.state.setJob(jobId, {
@@ -173,7 +182,7 @@ export class Gateway {
     this.livis.ackCancel(message);
     const jobId = message.metadata?.job_id;
     const active = this.active.get(jobId);
-    if (active) active.cancelled = true;
+    if (active) { active.cancelled = true; active.abort.abort(); }
     if (active?.turnId) {
       await this.codex.interrupt(active.threadId, active.turnId).catch(() => {});
     }
