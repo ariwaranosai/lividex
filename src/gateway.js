@@ -1,4 +1,5 @@
 import { createDeliveryDirectory, deliveryInstructions, parseDelivery, uploadDeliveryFile } from "./file-delivery.js";
+import { VOICE_INSTRUCTIONS } from "./voice-prompt.js";
 
 export class Gateway {
   constructor({ livis, codex, state, maxInputChars = 100_000, log = console }) {
@@ -135,7 +136,7 @@ export class Gateway {
     this.active.set(jobId, active);
     try {
       const directory = await createDeliveryDirectory(this.codex.config.cwd);
-      const result = await this.codex.runTurn(threadId, command.content + deliveryInstructions(directory), {
+      const result = await this.codex.runTurn(threadId, command.content + VOICE_INSTRUCTIONS + deliveryInstructions(directory), {
         jobId,
         onTurnStarted: (turnId) => {
           active.turnId = turnId;

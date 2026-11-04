@@ -18,7 +18,7 @@
     "macos:uninstall": "zsh scripts/macos-menubar.sh uninstall",
     "smoke:codex": "node scripts/smoke-codex.js",
     "test": "node --test",
-    "check": "node --check src/cli.js && node --check src/codex-client.js && node --check src/livis-client.js && node --check src/gateway.js && node --check src/file-delivery.js && node --check src/dashboard-server.js"
+    "check": "node --check src/cli.js && node --check src/codex-client.js && node --check src/livis-client.js && node --check src/gateway.js && node --check src/file-delivery.js && node --check src/voice-prompt.js && node --check src/dashboard-server.js"
   },
   "engines": {
     "node": ">=22"
